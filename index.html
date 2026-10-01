@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Galaxy of Us</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Dancing+Script:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #f4ecff;
+    --accent: #ff7ad9;
+    --accent-2: #8fd3ff;
+    --bg: #05030f;
+    --serif: "Cormorant Garamond", "Times New Roman", serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-family: var(--serif); }
+  body { touch-action: none; -webkit-user-select: none; user-select: none; }
+  canvas#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+  canvas#scene.dragging { cursor: grabbing; }
+
+  /* Chữ phủ trên / dưới */
+  #overlay { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 2.5s ease 1s; }
+  #overlay.show { opacity: 1; }
+  .headline {
+    position: absolute; left: 0; right: 0; text-align: center; text-transform: uppercase;
+    letter-spacing: 0.75em; padding-left: 0.75em; color: var(--ink);
+    text-shadow: 0 0 18px rgba(255, 122, 217, 0.65), 0 0 40px rgba(143, 211, 255, 0.35);
+  }
+  #txt-top { top: 5vh; font-size: clamp(20px, 5.2vh, 44px); font-style: italic; }
+  #txt-bottom { bottom: 5vh; font-size: clamp(14px, 3.4vh, 28px); opacity: 0.85; }
+
+  /* Màn hình chào */
+  #enter {
+    position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1.6vh; text-align: center; cursor: pointer; z-index: 10;
+    background: radial-gradient(ellipse at center, rgba(5, 3, 15, 0.35) 0%, rgba(5, 3, 15, 0.88) 75%);
+    transition: opacity 1.4s ease, visibility 1.4s;
+  }
+  #enter.hide { opacity: 0; visibility: hidden; }
+  #enter .title { font-size: clamp(30px, 9vh, 72px); font-style: italic; letter-spacing: 0.06em;
+    text-shadow: 0 0 24px rgba(255, 122, 217, 0.8); }
+  #enter .name { font-size: clamp(14px, 3.6vh, 26px); letter-spacing: 0.55em; padding-left: 0.55em; text-transform: uppercase; color: var(--accent-2); }
+  #enter .star { font-size: clamp(16px, 4vh, 28px); color: var(--accent); animation: pulse 2.2s ease-in-out infinite; }
+  #enter .cta { font-size: clamp(14px, 3.4vh, 22px); margin-top: 1vh; }
+  #enter .sub { font-size: clamp(9px, 2vh, 12px); letter-spacing: 0.4em; padding-left: 0.4em; opacity: 0.6; text-transform: uppercase; }
+  @keyframes pulse { 0%, 100% { opacity: 0.35; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1.2); } }
+
+  #hint {
+    position: fixed; left: 0; right: 0; bottom: 14vh; text-align: center; pointer-events: none;
+    font-size: clamp(11px, 2.4vh, 15px); letter-spacing: 0.2em; opacity: 0; transition: opacity 1.2s ease;
+  }
+  #hint.show { opacity: 0.7; }
+
+  /* Nút nhạc */
+  #music {
+    position: fixed; top: 14px; right: 14px; width: 44px; height: 44px; border-radius: 50%; z-index: 5;
+    border: 1px solid rgba(255, 122, 217, 0.6); background: rgba(20, 8, 40, 0.55); color: var(--ink);
+    display: none; align-items: center; justify-content: center; cursor: pointer; backdrop-filter: blur(6px);
+  }
+  #music.on { display: flex; }
+  #music svg { width: 18px; height: 18px; fill: currentColor; }
+  #music.playing { animation: spin 6s linear infinite; box-shadow: 0 0 16px rgba(255, 122, 217, 0.6); }
+  #music .i-play { display: block; } #music .i-pause { display: none; }
+  #music.playing .i-play { display: none; } #music.playing .i-pause { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Nút "Lời ngỏ" */
+  #letter-btn {
+    position: fixed; left: 50%; bottom: 4.5vh; transform: translateX(-50%); z-index: 5;
+    padding: 0.5em 1.6em; border-radius: 999px; border: 1px solid rgba(255, 170, 225, 0.8);
+    background: rgba(40, 10, 60, 0.55); color: var(--ink); font: italic 600 clamp(14px, 3.2vh, 20px) var(--serif);
+    letter-spacing: 0.12em; cursor: pointer; backdrop-filter: blur(6px);
+    box-shadow: 0 0 18px rgba(255, 90, 210, 0.55); opacity: 0; visibility: hidden; transition: opacity 1.5s ease 2s, visibility 0s 2s;
+  }
+  #letter-btn.show { opacity: 1; visibility: visible; }
+
+  /* Bức thư */
+  #letter-layer {
+    position: fixed; inset: 0; z-index: 8; overflow: hidden; background: rgba(12, 4, 28, 0.72);
+    backdrop-filter: blur(3px); opacity: 0; visibility: hidden; transition: opacity 0.4s ease, visibility 0.4s;
+  }
+  #letter-layer.show { opacity: 1; visibility: visible; }
+  #letter-layer.no-anim, #letter-layer.no-anim * { transition: none !important; }
+  .env {
+    position: absolute; left: var(--ex); top: var(--ey); width: var(--ew); height: var(--eh);
+    transition: opacity 0.6s ease, translate 0.7s ease, transform 0.7s ease-in-out;
+  }
+  .env-back { z-index: 1; background: #b9778f; border-radius: 6px; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45); }
+  .env-flap {
+    z-index: 5; height: calc(var(--eh) * 0.6); clip-path: polygon(0 0, 100% 0, 50% 100%);
+    background: linear-gradient(#e6b4c6, #d594ac); transform-origin: 50% 0; transform: perspective(900px) rotateX(0deg);
+  }
+  .s-open .env-flap { transform: perspective(900px) rotateX(180deg); }
+  .env-flap.behind { z-index: 2; background: linear-gradient(#c98aa1, #b9778f); }
+  .env-front { z-index: 4; clip-path: polygon(0 0, 50% 56%, 100% 0, 100% 100%, 0 100%);
+    background: linear-gradient(90deg, #d391a9, #e0a7bb 50%, #d391a9); border-radius: 0 0 6px 6px; }
+  .env-bottom { z-index: 4; clip-path: polygon(0 100%, 50% 42%, 100% 100%); background: linear-gradient(#e9b9ca, #dba0b6); border-radius: 0 0 6px 6px; }
+  .seal {
+    z-index: 6; left: calc(var(--ex) + var(--ew) / 2 - var(--eh) * 0.13); top: calc(var(--ey) + var(--eh) * 0.47);
+    width: calc(var(--eh) * 0.26); height: calc(var(--eh) * 0.26); border-radius: 50%; display: grid; place-items: center;
+    background: radial-gradient(circle at 35% 30%, #fff0f5, #f0b6c8 55%, #d88ba6);
+    box-shadow: 0 2px 6px rgba(90, 30, 60, 0.45), inset 0 0 0 3px rgba(255, 255, 255, 0.35);
+    transition: transform 0.5s ease, opacity 0.5s ease;
+  }
+  .seal svg { width: 62%; height: 62%; }
+  .s-seal .seal { opacity: 0; }
+  .s-seal .seal { transform: scale(1.6); transition-duration: 0.25s; }
+  .env-flap { transition-duration: 0.6s, 0.6s, 0.4s; }
+  .s-out .env { translate: 0 110vh; transition: translate 0.6s cubic-bezier(0.5, 0, 0.9, 0.4); }
+
+  .paper {
+    position: absolute; z-index: 3; left: calc(50% - var(--pw) / 2); top: calc(50% - var(--ph) / 2);
+    width: var(--pw); height: var(--ph); transform: translateY(var(--y0)) scale(var(--s));
+    transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .s-peek .paper { transform: translateY(var(--y1)) scale(var(--s)); }
+  .s-read .paper { transform: none; }
+  .pp { position: absolute; left: 0; width: 100%; height: 34%; background: #fbf7f5; transition: transform 0.55s ease-in-out; }
+  .p-top { top: 0; transform-origin: 50% 100%; border-radius: 5px 5px 0 0; }
+  .p-mid { top: 33%; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); }
+  .p-bot { top: 66%; transform-origin: 50% 0; border-radius: 0 0 5px 5px; }
+  .p-top { transform: perspective(1200px) rotateX(-179deg); background: #efe6e3; }
+  .p-bot { transform: perspective(1200px) rotateX(179deg); background: #f4ecea; }
+  .s-unfold1 .p-bot, .s-unfold2 .p-top { transform: perspective(1200px) rotateX(0deg); background: #fbf7f5; }
+
+  .paper-text {
+    position: absolute; inset: 0; padding: clamp(16px, 6%, 36px); overflow-y: auto; touch-action: pan-y;
+    color: #5b3446; font-family: "Dancing Script", cursive; font-weight: 500;
+    font-size: clamp(17px, 2.4vh + 0.7vw, 25px); line-height: 1.5; opacity: 0;
+  }
+  .s-text .paper-text { opacity: 1; }
+  .paper-text p { margin-bottom: 0.7em; }
+  .paper-text .greet { font-style: italic; font-weight: 600; font-size: 1.15em; color: #c2477f; }
+  .paper-text .sign { text-align: right; font-style: italic; margin-top: 1em; color: #c2477f; }
+  .paper-text .off { opacity: 0; }
+  .paper-text .caret { display: inline-block; width: 1px; height: 1em; margin: 0 1px; vertical-align: -0.12em; background: #c2477f; animation: blink 0.8s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  #letter-close {
+    position: absolute; top: 14px; right: 14px; z-index: 9; width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+    border: 1px solid rgba(255, 170, 225, 0.7); background: rgba(40, 10, 60, 0.7); color: var(--ink); font-size: 22px; line-height: 1;
+  }
+
+  /* Yêu cầu xoay ngang trên điện thoại */
+  #rotate {
+    position: fixed; inset: 0; z-index: 20; display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px; background: var(--bg); text-align: center; padding: 24px; font-size: 20px;
+  }
+  #rotate .phone { width: 46px; height: 78px; border: 2px solid var(--accent); border-radius: 9px; animation: tilt 2.4s ease-in-out infinite; }
+  #rotate small { opacity: 0.6; letter-spacing: 0.3em; text-transform: uppercase; font-size: 11px; }
+  @keyframes tilt { 0%, 20% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+  @media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+  @media (prefers-reduced-motion: reduce) { #enter .star, #rotate .phone, #music.playing { animation: none; } }
+</style>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+
+<div id="overlay">
+  <div class="headline" id="txt-top"></div>
+  <div class="headline" id="txt-bottom"></div>
+</div>
+
+<div id="hint">Kéo để xoay &nbsp;·&nbsp; Cuộn hoặc chụm để thu phóng</div>
+
+<button id="music" title="Phát / Tạm dừng nhạc" aria-label="Phát hoặc tạm dừng nhạc">
+  <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+  <svg class="i-pause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+</button>
+<audio id="bgm" loop preload="none"></audio>
+
+<button id="letter-btn">Lời ngỏ</button>
+
+<div id="letter-layer" aria-hidden="true">
+  <div class="env env-back"></div>
+  <div class="env env-flap"></div>
+  <div class="paper">
+    <div class="pp p-mid"></div><div class="pp p-top"></div><div class="pp p-bot"></div>
+    <div class="paper-text" id="paper-text"></div>
+  </div>
+  <div class="env env-front"></div>
+  <div class="env env-bottom"></div>
+  <div class="env seal">
+    <svg viewBox="0 0 48 48" fill="none" stroke="#c9728f" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M24 22 C16 12 7 12 7 20 C7 27 16 27 24 22 Z"/><path d="M24 22 C32 12 41 12 41 20 C41 27 32 27 24 22 Z"/>
+      <circle cx="24" cy="22" r="3" fill="#f6c9d7"/><path d="M22 25 L16 39 M26 25 L32 39"/>
+    </svg>
+  </div>
+  <button id="letter-close" aria-label="Đóng thư">×</button>
+</div>
+
+<div id="enter">
+  <div class="title" id="enter-title"></div>
+  <div class="name" id="enter-name"></div>
+  <div class="star">✦</div>
+  <div class="cta">Chạm để bắt đầu</div>
+  <div class="sub">Touch to enter the universe</div>
+</div>
+
+<div id="rotate">
+  <div class="phone"></div>
+  <div>Xoay ngang màn hình<br>để bắt đầu</div>
+  <small>Rotate to landscape</small>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ============================================================
+   CẤU HÌNH — sửa nội dung ở đây
+   ============================================================ */
+const CONFIG = {
+  title: 'Đăng Khoa give You',  // tiêu đề màn hình chào
+  name: 'Minh Thuỳ cuteee',     // tên hiện ở màn hình chào
+  ringText: 'Minh Thuỳ cuteee', // chữ chạy quanh hành tinh (vòng trong)
+  ellipseText: 'I LOVE YOU',    // chữ trên vòng elip (vòng ngoài)
+  topText: 'Love',
+  bottomText: '',               // để trống thì không hiện chữ phía dưới
+  // Đường dẫn ảnh. Để trống thì dùng ảnh mẫu.
+  images: ['images/1.webp', 'images/2.webp', 'images/3.webp', 'images/4.webp', 'images/5.webp', 'images/6.webp', 'images/7.webp'],
+  // Nhạc nền: link YouTube hoặc đường dẫn file mp3. Để trống thì ẩn nút nhạc.
+  song: 'https://www.youtube.com/watch?v=Trjrj_fQnIM',
+  songStart: 13,                // giây bắt đầu phát (bỏ đoạn trống đầu bài)
+  songEnd: 0,                   // giây kết thúc rồi lặp lại (0 = phát hết bài)
+  colors: {
+    planetCore: '#ff38dc',
+    planetRim: '#ffd0f5',
+    ringText: '#ffffff',
+    ellipseText: '#ffe38a',
+    nebula: ['#7a26ff', '#ff2fa8', '#c026ff', '#ff5fd0', '#2f7bff', '#4a1cb0']
+  },
+  // Bức thư "Lời ngỏ"
+  letter: {
+    greeting: 'Gửi Minh Thuỳ,',
+    body: [
+      'Anh làm cái này để tặng Minh Thuỳ như là cách thể hiện sự nghiêm túc trong câu từ của anh là muốn quen Minh Thuỳ.',
+      'Anh viết lên đây vì là anh nói chuyện với mình được ít quá nên viết như này cho mình đọc một thể luôn. Heh',
+      'Như anh nói đó là chưa thể nói trước gì cả nhưng kiểu gì muốn có sau này thì phải bắt đầu từ đâu đó, từ người lạ rồi mình mới thành người quen được chớ. Bây giờ còn lạ thì mới là nói chuyện thoải mái í, nên thoải mái ra như anh ấy cho dễ quen biết. Dù sao thì có người trò chuyện cùng mỗi ngày thì cũng thú vị mà :>>>>'
+    ],
+    sign: ''
+  },
+  beltPhotos: 420,             // số ảnh nhỏ trên vành đai (tự giảm trên điện thoại)
+  featurePhotos: 6              // số ảnh lớn trôi gần hành tinh
+};
+
+/* ============================================================ */
+(function () {
+  const $ = (id) => document.getElementById(id);
+  $('enter-title').textContent = CONFIG.title;
+  $('enter-name').textContent = CONFIG.name;
+  $('txt-top').textContent = CONFIG.topText;
+  $('txt-bottom').textContent = CONFIG.bottomText;
+  document.title = CONFIG.title;
+
+  const isTouch = matchMedia('(pointer: coarse)').matches;
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
+
+  // ---------- Renderer / camera ----------
+  const canvas = $('scene');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(DPR);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.3, 1200);
+
+  function resize() {
+    const w = window.innerWidth, h = window.innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- Texture helpers ----------
+  function canvasTexture(c) {
+    const t = new THREE.CanvasTexture(c);
+    t.encoding = THREE.sRGBEncoding;
+    t.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+    return t;
+  }
+
+  function glowTexture(inner, outer) {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const g = c.getContext('2d');
+    const grd = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    grd.addColorStop(0, inner); grd.addColorStop(0.35, outer); grd.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
+    return canvasTexture(c);
+  }
+
+  function hexA(hex, a) {
+    const c = new THREE.Color(hex);
+    return `rgba(${c.r * 255 | 0},${c.g * 255 | 0},${c.b * 255 | 0},${a})`;
+  }
+
+  function glowSprite(color, size, opacity) {
+    const m = new THREE.SpriteMaterial({
+      map: glowTexture(hexA(color, 1), hexA(color, 0.35)), blending: THREE.AdditiveBlending,
+      depthWrite: false, transparent: true, opacity
+    });
+    const s = new THREE.Sprite(m); s.scale.setScalar(size);
+    return s;
+  }
+
+  // ---------- Nền tinh vân ----------
+  (function nebula() {
+    const W = 2048, H = 1024;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    g.fillStyle = '#05030f'; g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = 'lighter';
+    const cols = CONFIG.colors.nebula;
+    for (let i = 0; i < 16; i++) {
+      const x = (i + Math.random()) / 16 * W, y = H * (0.5 + gauss() * 0.3), r = rand(160, 400);
+      const col = cols[i % cols.length], a = rand(0.16, 0.36);
+      for (const dx of [-W, 0, W]) { // lặp qua mép để không lộ đường nối
+        const grd = g.createRadialGradient(x + dx, y, 0, x + dx, y, r);
+        grd.addColorStop(0, hexA(col, a)); grd.addColorStop(1, hexA(col, 0));
+        g.fillStyle = grd; g.fillRect(x + dx - r, y - r, r * 2, r * 2);
+      }
+    }
+    const sky = new THREE.Mesh(
+      new THREE.SphereGeometry(600, 48, 32),
+      new THREE.MeshBasicMaterial({ map: canvasTexture(c), side: THREE.BackSide, depthWrite: false })
+    );
+    scene.add(sky);
+  })();
+
+  // ---------- Sao & bụi (điểm lấp lánh) ----------
+  const pointUniforms = { uTime: { value: 0 }, uDpr: { value: DPR } };
+  function makePoints(count, place, sizeRange, palette) {
+    const pos = new Float32Array(count * 3), col = new Float32Array(count * 3);
+    const size = new Float32Array(count), phase = new Float32Array(count);
+    const v = new THREE.Vector3(), c = new THREE.Color();
+    for (let i = 0; i < count; i++) {
+      place(v); pos.set([v.x, v.y, v.z], i * 3);
+      c.set(palette[(Math.random() * palette.length) | 0]); col.set([c.r, c.g, c.b], i * 3);
+      size[i] = rand(sizeRange[0], sizeRange[1]); phase[i] = Math.random() * 6.283;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+    geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
+    const mat = new THREE.ShaderMaterial({
+      uniforms: pointUniforms, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexShader: `
+        attribute float aSize; attribute float aPhase; attribute vec3 color;
+        uniform float uTime; uniform float uDpr; varying vec3 vCol; varying float vTw;
+        void main() {
+          vCol = color;
+          vTw = 0.55 + 0.45 * sin(uTime * 1.6 + aPhase);
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = aSize * uDpr * (0.7 + 0.5 * vTw) * (140.0 / max(-mv.z, 1.0));
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `
+        varying vec3 vCol; varying float vTw;
+        void main() {
+          float d = length(gl_PointCoord - 0.5);
+          float a = smoothstep(0.5, 0.0, d);
+          gl_FragColor = vec4(vCol, a * a * vTw);
+        }`
+    });
+    const p = new THREE.Points(geo, mat); p.frustumCulled = false;
+    return p;
+  }
+
+  const stars = makePoints(isTouch ? 2200 : 4000, (v) => {
+    v.set(gauss(), gauss(), gauss()).normalize().multiplyScalar(rand(120, 520));
+  }, [1.2, 4.5], ['#ffffff', '#cfe4ff', '#ffd9f4', '#fff3c9']);
+  scene.add(stars);
+
+  const BELT_IN = 8, BELT_OUT = 44;
+  const dust = makePoints(isTouch ? 1400 : 2600, (v) => {
+    const r = BELT_IN + Math.pow(Math.random(), 0.8) * (BELT_OUT - BELT_IN), a = Math.random() * 6.283;
+    v.set(Math.cos(a) * r, gauss() * 0.9, Math.sin(a) * r);
+  }, [0.25, 0.9], ['#ff8ee0', '#8fd3ff', '#ffffff', '#b79bff']);
+  scene.add(dust);
+
+  // ---------- Hành tinh trung tâm ----------
+  const PLANET_R = 3;
+  const planetUniforms = {
+    uTime: { value: 0 },
+    uCore: { value: new THREE.Color(CONFIG.colors.planetCore) },
+    uRim: { value: new THREE.Color(CONFIG.colors.planetRim) }
+  };
+  const planet = new THREE.Mesh(
+    new THREE.SphereGeometry(PLANET_R, 64, 48),
+    new THREE.ShaderMaterial({
+      uniforms: planetUniforms,
+      vertexShader: `
+        varying vec3 vN; varying vec3 vV; varying vec3 vP;
+        void main() {
+          vP = position;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `
+        uniform float uTime; uniform vec3 uCore; uniform vec3 uRim;
+        varying vec3 vN; varying vec3 vV; varying vec3 vP;
+        void main() {
+          float fres = pow(1.0 - max(dot(normalize(vN), normalize(vV)), 0.0), 2.2);
+          float bands = 0.5 + 0.5 * sin(vP.y * 2.4 + sin(vP.x * 1.3 + uTime * 0.25) * 1.2 + uTime * 0.15);
+          vec3 col = mix(uCore * 0.75, uCore * 1.15, bands);
+          col = mix(col, uRim, fres);
+          col += vec3(1.0) * pow(fres, 3.0) * 0.5;
+          gl_FragColor = vec4(col, 1.0);
+        }`
+    })
+  );
+  scene.add(planet);
+  scene.add(glowSprite(CONFIG.colors.planetCore, PLANET_R * 5.6, 1));
+  const halo = glowSprite('#b43cff', 30, 0.14); scene.add(halo);
+
+  // Quỹ đạo mảnh quanh hành tinh
+  function orbitLine(rx, rz, tiltX, tiltZ, opacity) {
+    const pts = [];
+    for (let i = 0; i <= 128; i++) { const a = i / 128 * 6.283; pts.push(new THREE.Vector3(Math.cos(a) * rx, 0, Math.sin(a) * rz)); }
+    const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity, depthWrite: false }));
+    l.rotation.set(tiltX, 0, tiltZ);
+    scene.add(l);
+  }
+  orbitLine(5.2, 5.2, 0.25, 0.12, 0.28);
+  orbitLine(7.6, 6.0, -0.2, -0.28, 0.18);
+
+  // ---------- Vòng chữ ----------
+  const textBands = [];
+  function textBand(text, color, radius, height, scaleXZ, tilt, speed) {
+    const W = 2048, H = 128;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    g.font = `600 ${H * 0.62}px "Cormorant Garamond", "Times New Roman", serif`;
+    g.textBaseline = 'middle'; g.textAlign = 'center';
+    const unit = text.toUpperCase().split('').join(' ') + '   ✦   ';
+    // Chia đều số lần lặp để chữ nối liền mạch quanh vòng
+    const circumference = 2 * Math.PI * radius * (scaleXZ[0] + scaleXZ[1]) / 2;
+    const bandAspect = circumference / height;
+    const repeatX = Math.max(1, Math.round(bandAspect / (W / H)));
+    const n = Math.max(1, Math.round(W / g.measureText(unit).width));
+    g.fillStyle = color; g.shadowColor = color; g.shadowBlur = 14;
+    for (let i = 0; i < n; i++) g.fillText(unit, (i + 0.5) * W / n, H / 2 + 4);
+    const tex = canvasTexture(c);
+    tex.wrapS = THREE.RepeatWrapping; tex.repeat.x = repeatX;
+
+    const geo = new THREE.CylinderGeometry(radius, radius, height, 128, 1, true);
+    const pivot = new THREE.Group(); pivot.rotation.set(tilt[0], 0, tilt[1]);
+    const spin = new THREE.Group(); spin.scale.set(scaleXZ[0], 1, scaleXZ[1]);
+    // Mặt sau mờ hơn để chữ phía trước dễ đọc
+    for (const [side, opacity] of [[THREE.BackSide, 0.28], [THREE.FrontSide, 1]]) {
+      spin.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, opacity, side, depthWrite: false, blending: THREE.AdditiveBlending
+      })));
+    }
+    pivot.add(spin); scene.add(pivot);
+    textBands.push({ spin, tex, speed });
+  }
+
+  // ---------- Ảnh ----------
+  const PHOTO_ASPECT = 0.8; // rộng / cao của khung ảnh
+  function framed(draw) {
+    const W = 400, H = 500, pad = 16;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
+    g.save(); g.beginPath(); g.rect(pad, pad, W - pad * 2, H - pad * 2); g.clip();
+    draw(g, pad, pad, W - pad * 2, H - pad * 2);
+    g.restore();
+    return canvasTexture(c);
+  }
+
+  function placeholderTexture(i) {
+    const hue = (i * 47 + 280) % 360;
+    return framed((g, x, y, w, h) => {
+      const grd = g.createLinearGradient(x, y, x + w, y + h);
+      grd.addColorStop(0, `hsl(${hue},75%,62%)`); grd.addColorStop(1, `hsl(${(hue + 60) % 360},70%,38%)`);
+      g.fillStyle = grd; g.fillRect(x, y, w, h);
+      g.fillStyle = 'rgba(255,255,255,0.92)'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = `${w * 0.42}px serif`; g.fillText('♥', x + w / 2, y + h * 0.44);
+      g.font = `600 ${w * 0.13}px serif`; g.fillText('Ảnh ' + (i + 1), x + w / 2, y + h * 0.78);
+    });
+  }
+
+  function loadPhoto(url, i) {
+    return new Promise((resolve) => {
+      const img = new Image(); img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          resolve(framed((g, x, y, w, h) => { // cắt kiểu "cover"
+            const s = Math.max(w / img.width, h / img.height);
+            const dw = img.width * s, dh = img.height * s;
+            g.drawImage(img, x + (w - dw) / 2, y + (h - dh) * 0.3, dw, dh); // lệch lên trên để giữ khuôn mặt
+          }));
+        } catch (e) { resolve(placeholderTexture(i)); }
+      };
+      img.onerror = () => { console.warn('Không tải được ảnh:', url); resolve(placeholderTexture(i)); };
+      img.src = url;
+    });
+  }
+
+  const photoGeo = new THREE.PlaneGeometry(PHOTO_ASPECT, 1);
+  const belts = [];     // InstancedMesh cho từng ảnh
+  const features = [];  // ảnh lớn trôi gần hành tinh
+  const dummy = new THREE.Object3D();
+
+  function buildPhotos(textures) {
+    const total = isTouch ? Math.min(CONFIG.beltPhotos, 240) : CONFIG.beltPhotos;
+    const per = Math.max(1, Math.round(total / textures.length));
+    textures.forEach((tex) => {
+      const mesh = new THREE.InstancedMesh(photoGeo, new THREE.MeshBasicMaterial({ map: tex }), per);
+      mesh.frustumCulled = false;
+      const items = [];
+      for (let i = 0; i < per; i++) {
+        const r = BELT_IN + Math.pow(Math.random(), 0.85) * (BELT_OUT - BELT_IN);
+        items.push({
+          r, a: Math.random() * 6.283, y: gauss() * (0.5 + r * 0.03),
+          s: rand(0.55, 1.25), w: 0.42 / Math.sqrt(r), ph: Math.random() * 6.283
+        });
+      }
+      scene.add(mesh); belts.push({ mesh, items });
+    });
+    for (let i = 0; i < CONFIG.featurePhotos; i++) {
+      const m = new THREE.Mesh(photoGeo, new THREE.MeshBasicMaterial({ map: textures[i % textures.length] }));
+      m.userData = {
+        r: rand(5.5, 9.5), a: i / CONFIG.featurePhotos * 6.283 + rand(-0.3, 0.3),
+        y: rand(-2.6, 2.6), s: rand(1.9, 2.7), w: rand(0.05, 0.09), ph: Math.random() * 6.283
+      };
+      scene.add(m); features.push(m);
+    }
+  }
+
+  // ---------- Hành tinh nhỏ ----------
+  const moons = [];
+  [['#ffd6f6', 0.32, 4.6, 0.5, 0.5], ['#3f8cff', 0.9, 13, 0.16, -1.2], ['#7fe9ff', 0.4, 7.2, 0.3, 0.8]].forEach(([col, size, r, w, y]) => {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(size, 24, 16), new THREE.MeshBasicMaterial({ color: col })));
+    g.add(glowSprite(col, size * 5, 0.7));
+    g.userData = { r, w, y, a: Math.random() * 6.283 };
+    scene.add(g); moons.push(g);
+  });
+
+  // ---------- Điều khiển camera ----------
+  const START_RADIUS = 140;
+  const ctl = { theta: 0.6, phi: 1.44, radius: START_RADIUS, tTheta: 0.6, tPhi: 1.44, tRadius: START_RADIUS, dragging: false };
+  const pointers = new Map(); let pinchDist = 0;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  canvas.addEventListener('pointerdown', (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    ctl.dragging = true; canvas.classList.add('dragging');
+    if (pointers.size === 2) pinchDist = pinchLength();
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    const p = pointers.get(e.pointerId); if (!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    if (pointers.size === 1) {
+      ctl.tTheta -= dx * 0.005;
+      ctl.tPhi = clamp(ctl.tPhi - dy * 0.004, 0.45, Math.PI - 0.45);
+    } else if (pointers.size === 2) {
+      const d = pinchLength();
+      if (pinchDist > 0) ctl.tRadius = clamp(ctl.tRadius * pinchDist / d, 8, 80);
+      pinchDist = d;
+    }
+  });
+  const release = (e) => {
+    pointers.delete(e.pointerId);
+    if (pointers.size === 0) { ctl.dragging = false; canvas.classList.remove('dragging'); }
+    pinchDist = 0;
+  };
+  canvas.addEventListener('pointerup', release);
+  canvas.addEventListener('pointercancel', release);
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    ctl.tRadius = clamp(ctl.tRadius * Math.exp(e.deltaY * 0.001), 8, 80);
+  }, { passive: false });
+  function pinchLength() {
+    const [a, b] = [...pointers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  // ---------- Vào cảnh ----------
+  const bgm = $('bgm'), musicBtn = $('music');
+  const setPlaying = (on) => musicBtn.classList.toggle('playing', on);
+  const ytId = (CONFIG.song.match(/(?:youtu\.be\/|[?&]v=|\/embed\/)([\w-]{11})/) || [])[1];
+  let music = { play() {}, toggle() {} };
+
+  if (ytId) {
+    // Trình phát YouTube ẩn, điều khiển qua IFrame API
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:-9999px;bottom:0;width:200px;height:200px;';
+    holder.innerHTML = '<div id="yt-player"></div>';
+    document.body.appendChild(holder);
+    let player = null, ready = false, wantPlay = false;
+    const restart = () => { player.seekTo(CONFIG.songStart || 0, true); player.playVideo(); };
+    window.onYouTubeIframeAPIReady = () => {
+      player = new YT.Player('yt-player', {
+        width: 200, height: 200, videoId: ytId,
+        playerVars: { start: Math.floor(CONFIG.songStart || 0), playsinline: 1, controls: 0, rel: 0 },
+        events: {
+          onReady: () => { ready = true; musicBtn.classList.add('on'); if (wantPlay) restart(); },
+          onStateChange: (e) => {
+            if (e.data === YT.PlayerState.ENDED) restart();
+            setPlaying(e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.BUFFERING);
+          },
+          onError: (e) => { console.warn('Không phát được nhạc YouTube, mã lỗi', e.data); musicBtn.classList.remove('on'); }
+        }
+      });
+    };
+    if (CONFIG.songEnd > 0) setInterval(() => {
+      if (ready && player.getPlayerState() === YT.PlayerState.PLAYING && player.getCurrentTime() >= CONFIG.songEnd) restart();
+    }, 500);
+    const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(s);
+    music = {
+      play() { wantPlay = true; if (ready) restart(); },
+      toggle() { if (!ready) return; player.getPlayerState() === YT.PlayerState.PLAYING ? player.pauseVideo() : player.playVideo(); }
+    };
+  } else if (CONFIG.song) {
+    bgm.src = CONFIG.song; musicBtn.classList.add('on');
+    bgm.addEventListener('play', () => setPlaying(true));
+    bgm.addEventListener('pause', () => setPlaying(false));
+    bgm.addEventListener('timeupdate', () => { if (CONFIG.songEnd > 0 && bgm.currentTime >= CONFIG.songEnd) bgm.currentTime = CONFIG.songStart || 0; });
+    music = {
+      play() { bgm.currentTime = CONFIG.songStart || 0; bgm.play().catch(() => {}); },
+      toggle() { bgm.paused ? bgm.play().catch(() => {}) : bgm.pause(); }
+    };
+  }
+  musicBtn.addEventListener('click', () => music.toggle());
+
+  const HOME_RADIUS = 16, INTRO_MS = 4000;
+  let entered = false, introStart = 0;
+  $('enter').addEventListener('click', () => {
+    if (entered) return; entered = true;
+    $('enter').classList.add('hide');
+    $('overlay').classList.add('show');
+    $('letter-btn').classList.add('show');
+    introStart = performance.now();
+    music.play();
+    setTimeout(() => $('hint').classList.add('show'), 2600);
+    setTimeout(() => $('hint').classList.remove('show'), 9000);
+  });
+
+  // ---------- Bức thư ----------
+  (function letter() {
+    const layer = $('letter-layer'), box = $('paper-text');
+    const flap = layer.querySelector('.env-flap'), seal = layer.querySelector('.seal');
+    const L = CONFIG.letter;
+    const paras = [{ t: L.greeting, c: 'greet' }, ...L.body.map((t) => ({ t, c: '' })), { t: L.sign, c: 'sign' }].filter((p) => p.t);
+    const STAGES = ['s-seal', 's-open', 's-peek', 's-out', 's-read', 's-unfold1', 's-unfold2', 's-text'];
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    let run = 0;
+
+    function layout() {
+      const vw = innerWidth, vh = innerHeight;
+      const eh = Math.min(vh * 0.42, vw * 0.7 / 1.5), ew = eh * 1.5, ex = (vw - ew) / 2, ey = vh * 0.52;
+      const pw = Math.min(vw * 0.86, 560), ph = Math.min(vh * 0.84, 640);
+      // Thư gấp làm ba nên chỉ cao 1/3 khi còn trong bao
+      const visible = ph / 3;
+      const s = Math.min(ew * 0.74 / pw, eh * 0.86 / visible);
+      const y0 = ey + eh * 0.52 - vh / 2, y1 = ey + eh * 0.4 - visible * s / 2 - vh / 2;
+      const set = (k, v) => layer.style.setProperty(k, v);
+      set('--ex', ex + 'px'); set('--ey', ey + 'px'); set('--ew', ew + 'px'); set('--eh', eh + 'px');
+      set('--pw', pw + 'px'); set('--ph', ph + 'px'); set('--s', s); set('--y0', y0 + 'px'); set('--y1', y1 + 'px');
+    }
+
+    function reset() {
+      layer.classList.add('no-anim');
+      layer.classList.remove(...STAGES);
+      flap.classList.remove('behind');
+      box.innerHTML = ''; box.scrollTop = 0;
+      layout();
+      void layer.offsetWidth;
+      layer.classList.remove('no-anim');
+    }
+
+    async function typewriter(alive) {
+      for (const p of paras) {
+        const el = document.createElement('p'); el.className = p.c;
+        el.innerHTML = '<span class="on"></span><span class="caret"></span><span class="off"></span>';
+        box.appendChild(el);
+        const on = el.children[0], caret = el.children[1], off = el.children[2];
+        for (let i = 0; i <= p.t.length; i++) {
+          if (!alive()) return;
+          on.textContent = p.t.slice(0, i); off.textContent = p.t.slice(i);
+          if (caret.offsetTop + caret.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = caret.offsetTop;
+          await sleep(/[.,!?]/.test(p.t[i - 1] || '') ? 220 : 32);
+        }
+        caret.remove();
+        await sleep(250);
+      }
+    }
+
+    async function play() {
+      const id = ++run, alive = () => id === run;
+      reset();
+      layer.classList.add('show'); layer.setAttribute('aria-hidden', 'false');
+      const step = async (cls, ms) => { if (cls) layer.classList.add(cls); await sleep(ms); return alive(); };
+      if (!await step(null, 600)) return;
+
+      if (reducedMotion) {
+        layer.classList.add('no-anim', ...STAGES);
+        for (const p of paras) { const el = document.createElement('p'); el.className = p.c; el.textContent = p.t; box.appendChild(el); }
+        return;
+      }
+
+      if (!await step('s-seal', 250)) return;
+      if (!await step('s-open', 200)) return;
+      flap.classList.add('behind');
+      if (!await step(null, 250)) return;
+      if (!await step('s-peek', 700)) return;
+      if (!await step('s-out', 350)) return;
+      if (!await step('s-read', 650)) return;
+      if (!await step('s-unfold1', 450)) return;
+      if (!await step('s-unfold2', 600)) return;
+      if (document.fonts && document.fonts.load) await Promise.race([document.fonts.load('500 20px "Dancing Script"'), sleep(1500)]).catch(() => {});
+      if (!alive()) return;
+      layer.classList.add('s-text');
+      await typewriter(alive);
+    }
+
+    function close() {
+      run++;
+      layer.classList.remove('show'); layer.setAttribute('aria-hidden', 'true');
+    }
+
+    $('letter-btn').addEventListener('click', play);
+    $('letter-close').addEventListener('click', close);
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  })();
+
+  // ---------- Vòng lặp ----------
+  const clock = new THREE.Clock();
+  function frame() {
+    requestAnimationFrame(frame);
+    const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+    pointUniforms.uTime.value = t; planetUniforms.uTime.value = t;
+
+    if (!ctl.dragging && !reducedMotion) ctl.tTheta += dt * 0.035;
+    const k = 1 - Math.exp(-dt * 5);
+    ctl.theta += (ctl.tTheta - ctl.theta) * k;
+    ctl.phi += (ctl.tPhi - ctl.phi) * k;
+    if (introStart) { // bay vào theo đồng hồ thật để không phụ thuộc tốc độ khung hình
+      const p = Math.min((performance.now() - introStart) / INTRO_MS, 1);
+      ctl.radius = ctl.tRadius = START_RADIUS + (HOME_RADIUS - START_RADIUS) * (1 - Math.pow(1 - p, 4));
+      if (p === 1) introStart = 0;
+    } else {
+      ctl.radius += (ctl.tRadius - ctl.radius) * k;
+    }
+    camera.position.set(
+      ctl.radius * Math.sin(ctl.phi) * Math.sin(ctl.theta),
+      ctl.radius * Math.cos(ctl.phi),
+      ctl.radius * Math.sin(ctl.phi) * Math.cos(ctl.theta)
+    );
+    camera.lookAt(0, 0, 0);
+
+    planet.rotation.y = t * 0.12;
+    dust.rotation.y = t * 0.02;
+    stars.rotation.y = t * 0.004;
+    for (const b of textBands) b.spin.rotation.y = -t * b.speed;
+
+    for (const m of moons) {
+      const u = m.userData, a = u.a + t * u.w;
+      m.position.set(Math.cos(a) * u.r, u.y + Math.sin(a * 2) * 0.4, Math.sin(a) * u.r);
+    }
+
+    // Ảnh luôn quay mặt về camera
+    for (const { mesh, items } of belts) {
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i], a = it.a + t * it.w;
+        dummy.position.set(Math.cos(a) * it.r, it.y + Math.sin(t * 0.6 + it.ph) * 0.18, Math.sin(a) * it.r);
+        dummy.quaternion.copy(camera.quaternion);
+        dummy.scale.setScalar(it.s);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+    for (const m of features) {
+      const u = m.userData, a = u.a + t * u.w;
+      m.position.set(Math.cos(a) * u.r, u.y + Math.sin(t * 0.5 + u.ph) * 0.35, Math.sin(a) * u.r);
+      m.quaternion.copy(camera.quaternion);
+      m.rotateZ(Math.sin(t * 0.4 + u.ph) * 0.06);
+      m.scale.setScalar(u.s);
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  // ---------- Khởi tạo ----------
+  const fontsReady = (document.fonts && document.fonts.load)
+    ? Promise.race([document.fonts.load('600 60px "Cormorant Garamond"'), new Promise((r) => setTimeout(r, 2500))]).catch(() => {})
+    : Promise.resolve();
+  fontsReady.then(() => {
+    textBand(CONFIG.ringText, CONFIG.colors.ringText, PLANET_R + 1.1, 0.8, [1, 1], [0.22, 0.1], 0.35);
+    textBand(CONFIG.ellipseText, CONFIG.colors.ellipseText, PLANET_R + 2.6, 0.66, [1.3, 0.95], [-0.2, -0.28], -0.22);
+  });
+
+  if (!CONFIG.bottomText) $('txt-bottom').style.display = 'none';
+  const sources = CONFIG.images.length ? CONFIG.images : new Array(12).fill(null);
+  Promise.all(sources.map((src, i) => src ? loadPhoto(src, i) : Promise.resolve(placeholderTexture(i)))).then(buildPhotos);
+
+  frame();
+})();
+</script>
+</body>
+</html>
