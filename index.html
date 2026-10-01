@@ -174,7 +174,7 @@
   <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
   <svg class="i-pause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
 </button>
-<audio id="bgm" loop preload="none"></audio>
+<audio id="bgm" preload="none"></audio>
 
 <button id="letter-btn">Lời ngỏ</button>
 
@@ -226,7 +226,7 @@ const CONFIG = {
   // Đường dẫn ảnh. Để trống thì dùng ảnh mẫu.
   images: ['images/1.webp', 'images/2.webp', 'images/3.webp', 'images/4.webp', 'images/5.webp', 'images/6.webp', 'images/7.webp'],
   // Nhạc nền: link YouTube hoặc đường dẫn file mp3. Để trống thì ẩn nút nhạc.
-  song: 'https://www.youtube.com/watch?v=Trjrj_fQnIM',
+  song: 'music/song.mp3',
   songStart: 13,                // giây bắt đầu phát (bỏ đoạn trống đầu bài)
   songEnd: 0,                   // giây kết thúc rồi lặp lại (0 = phát hết bài)
   colors: {
@@ -640,9 +640,14 @@ const CONFIG = {
     bgm.src = CONFIG.song; musicBtn.classList.add('on');
     bgm.addEventListener('play', () => setPlaying(true));
     bgm.addEventListener('pause', () => setPlaying(false));
+    bgm.addEventListener('ended', () => music.play());
     bgm.addEventListener('timeupdate', () => { if (CONFIG.songEnd > 0 && bgm.currentTime >= CONFIG.songEnd) bgm.currentTime = CONFIG.songStart || 0; });
     music = {
-      play() { bgm.currentTime = CONFIG.songStart || 0; bgm.play().catch(() => {}); },
+      play() { // iOS chỉ cho tua sau khi đã đọc được thông tin file
+        const seek = () => { bgm.currentTime = CONFIG.songStart || 0; };
+        if (bgm.readyState >= 1) seek(); else bgm.addEventListener('loadedmetadata', seek, { once: true });
+        bgm.play().catch(() => {});
+      },
       toggle() { bgm.paused ? bgm.play().catch(() => {}) : bgm.pause(); }
     };
   }
