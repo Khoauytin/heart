@@ -154,6 +154,8 @@
   #rotate small { opacity: 0.6; letter-spacing: 0.3em; text-transform: uppercase; font-size: 11px; }
   @keyframes tilt { 0%, 20% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
   @media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+  #rotate.skip { display: none; }
+  #rotate .skip-cta { margin-top: 10px; font-size: 15px; opacity: 0.75; text-decoration: underline; text-underline-offset: 4px; }
   @media (prefers-reduced-motion: reduce) { #enter .star, #rotate .phone, #music.playing { animation: none; } }
 </style>
 </head>
@@ -206,6 +208,7 @@
   <div class="phone"></div>
   <div>Xoay ngang màn hình<br>để bắt đầu</div>
   <small>Rotate to landscape</small>
+  <div class="skip-cta">Không xoay được? Chạm để xem dọc</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -256,6 +259,9 @@ const CONFIG = {
   $('txt-bottom').textContent = CONFIG.bottomText;
   document.title = CONFIG.title;
 
+  // Trình duyệt trong app (Zalo, Messenger...) thường khoá xoay màn hình nên cho phép xem dọc
+  $('rotate').addEventListener('click', () => $('rotate').classList.add('skip'));
+
   const isTouch = matchMedia('(pointer: coarse)').matches;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -270,8 +276,12 @@ const CONFIG = {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(55, 1, 0.3, 1200);
 
+  // Đo theo kích thước thật của canvas: iOS báo sự kiện resize trước khi innerWidth/innerHeight kịp đổi lúc xoay máy
+  let viewW = 0, viewH = 0;
   function resize() {
-    const w = window.innerWidth, h = window.innerHeight;
+    const w = canvas.clientWidth || window.innerWidth, h = canvas.clientHeight || window.innerHeight;
+    if (w === viewW && h === viewH) return;
+    viewW = w; viewH = h;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
@@ -758,6 +768,7 @@ const CONFIG = {
   const clock = new THREE.Clock();
   function frame() {
     requestAnimationFrame(frame);
+    resize();
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
     pointUniforms.uTime.value = t; planetUniforms.uTime.value = t;
 
